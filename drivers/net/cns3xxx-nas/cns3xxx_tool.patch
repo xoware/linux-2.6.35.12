@@ -1,0 +1,11 @@
+--- linux-2.6.35.12-cavm1/drivers/net/cns3xxx/cns3xxx_tool.h
++++ linux-2.6.35.12-cavm1/drivers/net/cns3xxx/cns3xxx_tool.h
+@@ -29,7 +29,7 @@
+ 
+ #if defined(__KERNEL__)
+ 
+-#include "../cns3xxx_pse_init/cns3xxx.h"
++#include "../../cns3xxx_pse_init/cns3xxx.h"
+ #include <linux/kernel.h> // for printk
+ 
+ #else // u-boot

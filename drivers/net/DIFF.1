@@ -1,0 +1,70 @@
+diff -ur cns3xxx_pse_init/Kconfig cns3xxx_pse_init/Kconfig
+--- cns3xxx_pse_init/Kconfig	2011-07-07 09:17:23.000000000 +0000
++++ cns3xxx_pse_init/Kconfig	2012-05-30 21:44:00.000000000 +0000
+@@ -104,6 +104,11 @@
+ 	  This configureation connect MAC0 to Vitesse 7395 
+           And run at 802p mode. WAN port vid is 2, LAN port vid is 3
+ 
++config XO
++	bool "XO Board"
++	help
++	  MAC1 and MAC2 connect to Vitesse 8601 gigabit ethernet transceivers.
++
+ endchoice
+ 
+ config BCM53115
+Binary files cns3xxx_pse_init/built-in.o and cns3xxx_pse_init/built-in.o differ
+diff -ur cns3xxx_pse_init/cns3xxx_phy.c cns3xxx_pse_init/cns3xxx_phy.c
+--- cns3xxx_pse_init/cns3xxx_phy.c	2012-05-30 22:15:13.000000000 +0000
++++ cns3xxx_pse_init/cns3xxx_phy.c	2012-05-30 21:44:00.000000000 +0000
+@@ -3951,3 +3951,50 @@
+ #endif // CONFIG_RTL8367_ONE_LEG
+ 
+ 
++void vsc7385_init_mac(u8 mac_port)
++{
++    u32 mac_port_config = 0;
++    u8 mac_addr[]={0x0c, 0x10, 0x18};
++    u8 tx = 0, rx = 0;
++
++    cns3xxx_enable_mac_clock(mac_port, 1);
++    cns3xxx_phy_auto_polling_enable(mac_port, 0);
++
++    mac_port_config = SWITCH_REG_VALUE(mac_addr[mac_port]);
++
++    /* enable GMII, MII, reverse MII */
++    mac_port_config &= (~(1 << 15));
++
++    /* enable RGMII */
++    mac_port_config |= (1 << 15);
++
++    /* disable GIGA mode */
++    mac_port_config &= (~(1<<16));
++
++    /* enable GIGA mode */
++    mac_port_config |= (1<<16);
++
++    /* disable PHY's AN */
++    mac_port_config &= (~(0x1 << 7));
++
++    /* force 1000Mbps */
++    mac_port_config &= (~(0x3 << 8));
++    mac_port_config |= (0x2 << 8);
++
++    /* force duplex */
++    mac_port_config |= (0x1 << 10);
++
++    /* TX flow control off */
++    mac_port_config &= ~(0x1 << 12);
++
++    /* RX flow control off */
++    mac_port_config &= ~(0x1 << 11);
++
++    /* Turn off GSW_PORT_TX_CHECK_EN_BIT */
++    mac_port_config &= (~(0x1 << 13));
++
++    /* Turn on GSW_PORT_TX_CHECK_EN_BIT */
++    mac_port_config |= (0x1 << 13);
++
++    SWITCH_REG_VALUE(mac_addr[mac_port]) = mac_port_config;
++}

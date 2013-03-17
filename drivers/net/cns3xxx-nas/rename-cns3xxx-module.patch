@@ -1,0 +1,17 @@
+--- linux-2.6.31.1-cavm1/drivers/net/cns3xxx/Makefile	2010-12-13 14:28:36.008698213 +0800
++++ linux-2.6.31.1-cavm1/drivers/net/cns3xxx/Makefile	2010-12-13 17:23:58.648696740 +0800
+@@ -32,10 +32,10 @@
+ #obj-y :=
+ #obj-m :=
+ 
+-obj-$(CONFIG_CNS3XXX_GSW) += cns3xxx.o
+-cns3xxx-objs := cns3xxx_main.o cns3xxx_ethtool.o cns3xxx_ioctl.o
+-#obj-$(CONFIG_RTL8367) += rtl8367/
+-#EXTRA_CFLAGS += -Idrivers/net/cns3xxx/rtl8367/
++obj-$(CONFIG_CNS3XXX_GSW) += cns3xxx_nas.o
++cns3xxx_nas-objs := cns3xxx_main.o cns3xxx_ethtool.o 
++#obj-$(CONFIG_RTL8367) += rtl8367/
++#EXTRA_CFLAGS += -Idrivers/net/cns3xxx/rtl8367/
+ #vega_main.o
+ 
+ #include $(TOPDIR)/Rules.make

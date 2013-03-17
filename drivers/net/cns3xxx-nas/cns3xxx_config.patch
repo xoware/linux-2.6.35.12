@@ -1,0 +1,52 @@
+--- linux-2.6.31.1-cavm1/drivers/net/cns3xxx/cns3xxx_config.h	2011-01-11 17:14:42.876697771 +0800
++++ linux-2.6.31.1-cavm1/drivers/net/cns3xxx/cns3xxx_config.h	2011-01-11 17:32:23.292698088 +0800
+@@ -33,20 +33,15 @@
+ #define LINUX2631 1
+ #endif
+ 
+-//#define CONFIG_SWITCH_BIG_ENDIAN
+-
+-//#define CONFIG_FPGA_FORCE
+-
+-//#define CNS3XXX_GIGA_MODE
++#define CONFIG_CNS3XXX_JUMBO_FRAME
++#define MAX_PACKET_LEN 9018 //KH: set to 9014 + 4 for Intel E1000E ( 9301CT)
++#define RX_DESC_SIZE 1024
++#define TX_DESC_SIZE 2048
+ 
+ #define CNS3XXX_CPU_MIB_COUNTER
+ #define CNS3XXX_MAC0_MIB_COUNTER
+ #define CNS3XXX_MAC1_MIB_COUNTER
+ #define CNS3XXX_MAC2_MIB_COUNTER
+-//#define QOS_TEST
+-//#define CONFIG_FAST_BRIDGE
+-//#define CONFIG_HOLP_TEST
+-
+ 
+ #define CONFIG_CNS3XXX_NAPI
+ #ifdef CONFIG_CNS3XXX_NAPI
+@@ -62,7 +57,8 @@
+ //#define CNS3XXX_SG_DISABLE 
+ #endif
+ 
+-//#define CNS3XXX_SHOW_LINK_STATUS
++//#define CNS3XXX_STATUS_ISR
++#define CNS3XXX_SHOW_LINK_STATUS
+ 
+ #ifdef CNS3XXX_SHOW_LINK_STATUS
+ #define CNS3XXX_STATUS_ISR
+@@ -110,8 +106,12 @@
+ #define CNS3XXX_FSQF_RING1_ISR
+ #endif
+ 
+-//#define CNS3XXX_ENABLE_RINT1
++#define CNS3XXX_DELAYED_INTERRUPT
+ 
+-#define PRINT_INFO printk
++#ifdef CNS3XXX_DELAYED_INTERRUPT
++#define MAX_PEND_INT_CNT 0x1f //0x06
++#define MAX_PEND_TIME 0xf //0x20
++#endif
+ 
++//#define CNS3XXX_ENABLE_RINT1
+ #endif

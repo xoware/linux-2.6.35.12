@@ -1,0 +1,461 @@
+diff -urN '--exclude=.git*' cns3xxx_pse_init/Kconfig cns3xxx_pse_init/Kconfig
+--- cns3xxx_pse_init/Kconfig	2012-05-30 22:49:57.000000000 +0000
++++ cns3xxx_pse_init/Kconfig	2012-05-02 06:03:48.000000000 +0000
+@@ -104,6 +104,11 @@
+ 	  This configureation connect MAC0 to Vitesse 7395 
+           And run at 802.1p mode. WAN port vid is 2, LAN port vid is 3
+ 
++config XO
++	bool "XO Board"
++	help
++	  MAC1 and MAC2 connect to Vitesse 8601 gigabit ethernet transceivers.
++
+ endchoice
+ 
+ config BCM53115
+diff -urN '--exclude=.git*' cns3xxx_pse_init/cns3xxx_phy.c cns3xxx_pse_init/cns3xxx_phy.c
+--- cns3xxx_pse_init/cns3xxx_phy.c	2012-05-30 22:49:57.000000000 +0000
++++ cns3xxx_pse_init/cns3xxx_phy.c	2012-05-30 18:51:49.000000000 +0000
+@@ -26,6 +26,7 @@
+ #include "cns3xxx_symbol.h"
+ 
+ #include <linux/gpio.h>
++#include <linux/delay.h>
+ 
+ #if defined(LINUX_KERNEL)
+ #include "cns3xxx_tool.h"
+@@ -46,6 +47,10 @@
+ #define printk printf
+ #endif
+ 
++#ifdef CONFIG_XO
++#include "vsc7385.h"
++#endif // CONFIG_XO
++
+ #ifdef CONFIG_CNS3XXX_SPEEDUP_NAS
+ ushort jumbo_frame = 1;
+ #else
+@@ -1019,9 +1024,6 @@
+ 
+ #endif
+ 
+-
+-#if defined(CONFIG_VB) 
+-#if defined(LINUX_KERNEL)
+ int cns3xxx_spi_tx_rx_n(u32 tx_data, u32 *rx_data, u32 tx_channel, u32 tx_eof_flag)
+ {
+ 	u8 cns3xxx_spi_tx_rx(u8 tx_channel, u8 tx_eof, u32 tx_data, u32 * rx_data);
+@@ -1029,6 +1031,8 @@
+ 	return cns3xxx_spi_tx_rx(tx_channel, tx_eof_flag, tx_data, rx_data);
+ }
+ 
++#if defined(CONFIG_VB) 
++#if defined(LINUX_KERNEL)
+ int bcm53115M_reg_read(int page, int offset, u8 *buf, int len)
+ {
+ 	u32 ch = BCM53115_SPI_CHANNEL;
+@@ -1585,6 +1589,235 @@
+ #endif // defined(LINUX_KERNEL)
+ #endif // ONFIG_VB
+ 
++#ifdef CONFIG_XO
++int vsc7385_reg_read(u32 block, u32 subblock, u32 addr, u32 *value)
++{
++	u32 ch = BCM53115_SPI_CHANNEL;
++	u8 cmd_byte;
++	u32 dumy_word, data[4];
++
++/*
++  Read from VSC7385 register
++
++               7   6   5   4   3   2   1   0
++               __________  _  ______________
++  Byte 0:       Block ID   0     Subblock
++               _____________________________
++  Byte 1:                 Address
++               _____________________________
++  Bytes 2-3:               Dummy
++               _____________________________
++  Bytes 4-7:             More dummy           <---- read data shifts out during these bytes
++
++*/
++
++	cmd_byte = ((block & 0x7) << 5) | (0 << 4) | (subblock & 0xf);
++
++	cns3xxx_spi_tx_rx_n(cmd_byte, &dumy_word, ch, 0);  // send command
++	cns3xxx_spi_tx_rx_n(addr, &dumy_word, ch, 0);      // send address
++	cns3xxx_spi_tx_rx_n(0x00, &dumy_word, ch, 0);      // pad byte
++	cns3xxx_spi_tx_rx_n(0x00, &dumy_word, ch, 0);      // pad byte
++	cns3xxx_spi_tx_rx_n(0x00, &data[0], ch, 0);        // read data 0
++	cns3xxx_spi_tx_rx_n(0x00, &data[1], ch, 0);        // read data 1
++	cns3xxx_spi_tx_rx_n(0x00, &data[2], ch, 0);        // read data 2
++	cns3xxx_spi_tx_rx_n(0x00, &data[3], ch, 1);        // read data 3
++
++	*value = data[0] << 24 | data[1] << 16 | data[2] << 8 | data[3];
++	
++	return 0;
++}
++
++int vsc7385_reg_write(u32 block, u32 subblock, u32 addr, u32 value)
++{
++	u32 ch = BCM53115_SPI_CHANNEL;
++	u8 cmd_byte;
++	u32 dumy_word, data[4];
++
++/*
++  Write to VSC7385 register
++
++               7   6   5   4   3   2   1   0
++               __________  _  ______________
++  Byte 0:       Block ID   1     Subblock
++               _____________________________
++  Byte 1:                 Address
++               _____________________________
++  Bytes 2-5:             Write Data
++  
++
++*/
++	data[0] = (value >> 24);
++        data[1] = (value >> 16) & 0xff;
++        data[2] = (value >> 8) & 0xff; 
++        data[3] = value & 0xff; 
++
++	cmd_byte = ((block & 0x7) << 5) | (1 << 4) | (subblock & 0xf);
++
++	cns3xxx_spi_tx_rx_n(cmd_byte, &dumy_word, ch, 0);  // send command
++	cns3xxx_spi_tx_rx_n(addr, &dumy_word, ch, 0);      // send address
++	cns3xxx_spi_tx_rx_n(data[0], &dumy_word, ch, 0);   // write data 0
++	cns3xxx_spi_tx_rx_n(data[1], &dumy_word, ch, 0);   // write data 1
++	cns3xxx_spi_tx_rx_n(data[2], &dumy_word, ch, 0);   // write data 2
++	cns3xxx_spi_tx_rx_n(data[3], &dumy_word, ch, 1);   // write data 3
++	
++	return 0;
++}
++
++void vsc7385_switch_mac_init(u8 mac_port)
++{
++	u32 mac_port_config = 0;
++	u8 mac_addr[]={0x0c, 0x10, 0x18};
++
++	cns3xxx_enable_mac_clock(mac_port, 1);
++	cns3xxx_phy_auto_polling_enable(mac_port, 0);
++
++	mac_port_config = SWITCH_REG_VALUE(mac_addr[mac_port]);
++
++	// enable RGMII
++	mac_port_config |= (1 << 15);
++
++        // enable GIGA mode
++        mac_port_config |= (1<<16);
++
++        // disable PHY's AN
++	mac_port_config &= (~(0x1 << 7));
++
++	// force 1000Mbps
++	mac_port_config &= (~(0x3 << 8));
++	mac_port_config |= (0x2 << 8);
++
++	// force duplex
++	mac_port_config |= (0x1 << 10);
++
++	// TX flow control off
++	mac_port_config &= ~(0x1 << 12);
++
++	// RX flow control off
++	mac_port_config &= ~(0x1 << 11);
++
++	// Turn off GSW_PORT_TX_CHECK_EN_BIT
++	mac_port_config &= (~(0x1 << 13));
++
++	SWITCH_REG_VALUE(mac_addr[mac_port]) = mac_port_config;
++}
++
++int vsc7385_switch_init(u8 mac_port)
++{
++	int mode[7] = { Link1000Full, Link1000Full, Link1000Full, Link1000Full, Link1000Full, 
++			LinkDown, // there is no switch port 5
++			Link1000Full }; // switch port 6 is connected to CPU MAC 2
++	int mem_id = 0, switch_mac_num = 0;
++	u32 value = 0;
++
++	printk("MAC PORT %d : Initialize VSC7385\n", mac_port);
++
++	/* configure cns3xxx MAC which is connected to switch MAC 6 */
++
++	vsc7385_switch_mac_init(mac_port);
++
++	/* initialize switch memories */
++
++	for (mem_id = 0; mem_id < 16; mem_id++)
++	{
++		if (mem_id != 6 && mem_id != 7)
++		{
++			value = 0x1010400 + mem_id;
++			vsc7385_reg_write(BLOCK_MEMINIT, SUBBLOCK_MEMINIT, ADDRESS_MEMINIT, value);
++			udelay(1000);
++		}
++	}
++	msleep(500); 
++
++	/* format switch memories */
++
++	/* clear MAC table command */
++	vsc7385_reg_write(BLOCK_FRAME_ANALYZER, SUBBLOCK_FRAME_ANALYZER, ADDRESS_MACACCESS, 5);
++	/* clear VLAN table command */
++	vsc7385_reg_write(BLOCK_FRAME_ANALYZER, SUBBLOCK_FRAME_ANALYZER, ADDRESS_VLANACCESS, 3);
++	//udelay(40*1000);
++	msleep(500); 
++
++	/* allow incoming packets from all the switch ports */
++
++	value = 0x5f;  // there are 6 ports: 0-4 & 6
++	vsc7385_reg_write(BLOCK_FRAME_ANALYZER, SUBBLOCK_FRAME_ANALYZER, ADDRESS_RECVMASK, value);
++
++	/* init MACs inside switch */
++
++	for (switch_mac_num = 0; switch_mac_num < 7; switch_mac_num++)
++	{
++		/* there is no port 5, externally attached MAC is 6 */
++		if (switch_mac_num == 5) continue;
++
++		printf("MAC_CFG (minus clk bits): 0x%x\n", mode[switch_mac_num]);
++
++		/* datasheet says to write new speed/duplex once with resets asserted, then without resets */
++		switch(mode[switch_mac_num]) 
++		{
++			case LinkDown:
++				value = MAC_RESET;
++				break;
++
++			case Link1000Full:
++				value = MAC_1000_FULL;
++				if (switch_mac_num == 6) 
++					value |= MAC_EXT_CLK_1000;
++				else 
++					value |= MAC_INT_CLK;
++				break;
++			
++			case Link100Full:
++				value = MAC_100_FULL;
++				if (switch_mac_num == 6) 
++					value |= MAC_EXT_CLK_100;
++				else 
++					value |= MAC_INT_CLK;
++				break;
++
++			case Link10Full:
++				value = MAC_10_FULL;
++				if (switch_mac_num == 6) 
++					value |= MAC_EXT_CLK_10;
++				else 
++					value |= MAC_INT_CLK;
++				break;
++
++			case Link100Half:
++				value = MAC_100_HALF;
++				if (switch_mac_num == 6) 
++					value |= MAC_EXT_CLK_100;
++				else 
++					value |= MAC_INT_CLK;
++				break;
++
++			case Link10Half:
++				value = MAC_10_HALF;
++				if (switch_mac_num == 6) 
++					value |= MAC_EXT_CLK_10;
++				else 
++					value |= MAC_INT_CLK;
++				break;
++		}
++		vsc7385_reg_write(BLOCK_MAC, switch_mac_num, ADDRESS_MAC_CFG, value|MAC_RESET);
++		vsc7385_reg_write(BLOCK_MAC, switch_mac_num, ADDRESS_MAC_CFG, value);
++	}
++
++        /* advanced port mode for port 6 connected directly to 3420 */
++	vsc7385_reg_write(BLOCK_MAC, 6, ADDRESS_ADVPORTM, 0x2c);
++
++	/* RGMII port mode needs shift between clock and data */
++	vsc7385_reg_write(BLOCK_SYSTEM, SUBBLOCK_SYSTEM, ADDRESS_GMIIDELAY, 0x33);
++
++	/* release switch PHYs from reset */
++
++	vsc7385_reg_write(BLOCK_SYSTEM, SUBBLOCK_SYSTEM, ADDRESS_GLORESET, 2);
++	udelay(4);
++
++	return CAVM_OK;
++}
++
++#endif // CONFIG_XO
++
+ void general_init_mac(u8 mac_port, u16 phy_addr, u8 rgmii_phy, u8 giga_mode)
+ {
+ 	u32 mac_port_config = 0;
+@@ -1597,7 +1830,6 @@
+ 	cns3xxx_txc_dly(mac_port, 2);
+ 	cns3xxx_rxc_dly(mac_port, 2);
+ 	//SLK_SKEW_CTRL_REG 
+-#if 1
+ 
+ 	// enable GMII, MII, reverse MII
+ 	mac_port_config &= (~(1 << 15));
+@@ -1606,7 +1838,7 @@
+ 		mac_port_config |= (1 << 15);
+ 
+ 	// TXC check disable
+-	//mac_port_config &= (~(1 << 13));
++	mac_port_config &= (~(1 << 13));
+ 
+         // disable GIGA mode
+         mac_port_config &= (~(1<<16));
+@@ -1619,36 +1851,15 @@
+ 
+         // enable PHY's AN
+ 	mac_port_config |= (0x1 << 7);
+-#else
+-        // disable PHY's AN
+-	mac_port_config &= (~(0x1 << 7));
+-        // disable GIGA mode
+-        mac_port_config &= (~(1<<16));
+-
+-	// force 100Mbps
+-	mac_port_config &= (~(0x3 << 8));
+-	mac_port_config |= (0x1 << 8);
+-	
+-	// force duplex
+-	mac_port_config |= (0x1 << 10);
+ 
++#ifdef CONFIG_XO
+ 	// TX flow control off
+ 	mac_port_config &= (~(0x1 << 12));
+ 
+ 	// RX flow control off
+ 	mac_port_config &= (~(0x1 << 11));
+-
+-#if 0
+-	// TX flow control on
+-	mac_port_config |= (0x1 << 12);
+-
+-	// RX flow control on
+-	mac_port_config |= (0x1 << 11);
+ #endif
+ 
+-	// enable GMII, MII, reverse MII
+-	mac_port_config &= (~(1 << 15));
+-#endif
+ 	SWITCH_REG_VALUE(mac_addr[mac_port]) = mac_port_config;
+ }
+ 
+@@ -3951,3 +4162,42 @@
+ #endif // CONFIG_RTL8367_ONE_LEG
+ 
+ 
++void vsc7385_init_mac(u8 mac_port)
++{
++    u32 mac_port_config = 0;
++    u8 mac_addr[]={0x0c, 0x10, 0x18};
++    u8 tx = 0, rx = 0;
++
++    cns3xxx_enable_mac_clock(mac_port, 1);
++    cns3xxx_phy_auto_polling_enable(mac_port, 0);
++
++    mac_port_config = SWITCH_REG_VALUE(mac_addr[mac_port]);
++
++    /* enable GMII, MII, reverse MII */
++    mac_port_config &= (~(1 << 15));
++
++    /* enable RGMII */
++    mac_port_config |= (1 << 15);
++
++    /* enable GIGA mode */
++    mac_port_config |= (1<<16);
++
++    /* disable PHY's AN */
++    mac_port_config &= (~(0x1 << 7));
++
++    /* force 1000Mbps */
++    mac_port_config &= (~(0x3 << 8));
++    mac_port_config |= (0x2 << 8);
++
++    /* force duplex */
++    mac_port_config |= (0x1 << 10);
++
++    /* TX flow control off */
++    mac_port_config &= ~(0x1 << 12);
++
++    /* RX flow control off */
++    mac_port_config &= ~(0x1 << 11);
++
++    /* Turn off GSW_PORT_TX_CHECK_EN_BIT */
++    mac_port_config &= (~(0x1 << 13));
++}
+diff -urN '--exclude=.git*' cns3xxx_pse_init/vsc7385.h cns3xxx_pse_init/vsc7385.h
+--- cns3xxx_pse_init/vsc7385.h	1970-01-01 00:00:00.000000000 +0000
++++ cns3xxx_pse_init/vsc7385.h	2012-05-30 18:24:14.000000000 +0000
+@@ -0,0 +1,45 @@
++#ifndef  VSC7385_H
++#define  VSC7385_H
++
++int vsc7385_reg_read(u32 block, u32 subblock, u32 addr, u32 *value);
++int vsc7385_reg_write(u32 block, u32 subblock, u32 addr, u32 value);
++
++/* VSC7385 register addressing */
++#define BLOCK_SYSTEM       7
++#define SUBBLOCK_SYSTEM    0
++#define ADDRESS_GMIIDELAY  5
++#define ADDRESS_ICPU_CTRL  0x10
++#define ADDRESS_ICPU_ADDR  0x11
++#define ADDRESS_ICPU_DATA  0x12
++#define ADDRESS_GLORESET   0x14
++
++#define BLOCK_MEMINIT      3
++#define SUBBLOCK_MEMINIT   2
++#define ADDRESS_MEMINIT    0
++
++#define BLOCK_FRAME_ANALYZER    2
++#define SUBBLOCK_FRAME_ANALYZER 0
++#define ADDRESS_RECVMASK        0x10
++#define ADDRESS_MACACCESS       0xb0
++#define ADDRESS_VLANACCESS      0xe0
++
++#define BLOCK_MAC          1
++#define ADDRESS_MAC_CFG    0
++#define ADDRESS_ADVPORTM   0x19
++
++/* ethernet modes */
++enum { LinkDown, Link1000Full, Link100Full, Link10Full, Link100Half, Link10Half };
++
++#define MAC_RESET     0x20000030
++#define MAC_1000_FULL 0x10070180
++#define MAC_100_FULL  0x10050440
++#define MAC_10_FULL   0x10050440
++#define MAC_100_HALF  0x90010440
++#define MAC_10_HALF   0x90010440
++
++#define MAC_EXT_CLK_1000 0x1
++#define MAC_EXT_CLK_100  0x2
++#define MAC_EXT_CLK_10   0x3
++#define MAC_INT_CLK      0x4
++
++#endif  // VSC7385_H
+diff -urN '--exclude=.git*' cns3xxx_pse_init/xo.h cns3xxx_pse_init/xo.h
+--- cns3xxx_pse_init/xo.h	2012-05-30 22:49:57.000000000 +0000
++++ cns3xxx_pse_init/xo.h	2012-05-30 18:24:16.000000000 +0000
+@@ -35,16 +35,15 @@
+ #ifdef CONFIG_XO
+ 
+ // init phy or switch chip
++int vsc7385_switch_init(u8 mac_port);
+ #define INIT_PORT0_PHY probe_phy(0, 1);
+ #define INIT_PORT1_PHY probe_phy(1, 2);
+-#define INIT_PORT2_PHY 
++#define INIT_PORT2_PHY vsc7385_switch_init(2);
+ 
+ // configure mac0/mac1 register
+-void vsc7385_init_mac(u8 mac_port);
+ #define INIT_PORT0_MAC 
+ #define INIT_PORT1_MAC
+ #define INIT_PORT2_MAC
+-//#define INIT_PORT2_MAC vsc7385_init_mac(2);
+ 
+ #define PORT0_LINK_DOWN cns3xxx_std_phy_power_down(1, 1);
+ #define PORT0_LINK_UP cns3xxx_std_phy_power_down(1, 0);
