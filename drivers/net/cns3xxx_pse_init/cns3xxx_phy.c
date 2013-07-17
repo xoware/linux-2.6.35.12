@@ -1590,7 +1590,7 @@ int bcm53115M_init(u8 mac_port, u16 phy_addr)
 	return CAVM_OK;
 }
 #endif // defined(LINUX_KERNEL)
-#endif // ONFIG_VB
+#endif // CONFIG_VB
 
 #ifdef CONFIG_XO
 int vsc7385_reg_read(u32 block, u32 subblock, u32 addr, u32 *value)
@@ -1612,6 +1612,8 @@ int vsc7385_reg_read(u32 block, u32 subblock, u32 addr, u32 *value)
                _____________________________
   Bytes 4-7:             More dummy           <---- read data shifts out during these bytes
 
+  --
+  bcm commands in uboot are also modified in this fashion, to write to vitesse via spi
 */
 
 	cmd_byte = ((block & 0x7) << 5) | (0 << 4) | (subblock & 0xf);
