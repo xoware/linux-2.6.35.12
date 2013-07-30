@@ -51,7 +51,7 @@ rtl8367/rtl8370_asicdrv_igmp.o       rtl8367/rtl8370_asicdrv_portIsolation.o  rt
 rtl8367/rtl8370_asicdrv_inbwctrl.o   rtl8367/rtl8370_asicdrv_qos.o \
 rtl8367/rtl8370_asicdrv_interrupt.o  rtl8367/rtl8370_asicdrv_rldp.o 					rtl8367/rtk_api.o
 else
-cns3xxx_pse_init-objs := cns3xxx_phy.o pse_init.o
+cns3xxx_pse_init-objs := cns3xxx_phy.o pse_init.o vsc7385fw.o
 endif
 
 ifeq (y, $(filter $(CONFIG_CNS3XXX_PSE_SW_PHY_AUTO_POLLING), y))

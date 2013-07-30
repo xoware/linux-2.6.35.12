@@ -42,4 +42,8 @@ enum { LinkDown, Link1000Full, Link100Full, Link10Full, Link100Half, Link10Half 
 #define MAC_EXT_CLK_10   0x3
 #define MAC_INT_CLK      0x4
 
+
+extern unsigned char vsc7385fw[];
+extern int  vsc7385fw_len;
+
 #endif  // VSC7385_H

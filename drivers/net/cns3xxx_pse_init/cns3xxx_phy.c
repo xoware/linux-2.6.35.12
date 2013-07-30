@@ -1706,6 +1706,61 @@ void vsc7385_switch_mac_init(u8 mac_port)
 	SWITCH_REG_VALUE(mac_addr[mac_port]) = mac_port_config;
 }
 
+
+
+int vsc7385_sw_load(u8 *fw_ptr, u32 len)
+{
+        u32 value = 0;  
+
+
+        u8 *dp; 
+        u32 mylen = len;
+
+        printf("Holding ICPU reset");
+        value = (1<<7) | (1<<3) | (1<<2) | (0<<0);  
+        vsc7385_reg_write(BLOCK_SYSTEM, SUBBLOCK_SYSTEM, ADDRESS_ICPU_CTRL, value);
+
+        printf("Loading ICPU (%d bytes) \n", mylen);
+        dp = fw_ptr;
+        value = 0;
+        vsc7385_reg_write(BLOCK_SYSTEM, SUBBLOCK_SYSTEM, ADDRESS_ICPU_ADDR, value);
+        while (mylen--)
+                vsc7385_reg_write(BLOCK_SYSTEM, SUBBLOCK_SYSTEM, ADDRESS_ICPU_DATA, *dp++);
+        printf("ICPU loaded \n");
+
+
+        value = 0;
+        vsc7385_reg_write(BLOCK_SYSTEM, SUBBLOCK_SYSTEM, ADDRESS_ICPU_ADDR, value);
+        udelay(20);
+        mylen = len;
+        dp = fw_ptr;
+        while (mylen--) {
+                value = 0;
+                vsc7385_reg_read(BLOCK_SYSTEM, SUBBLOCK_SYSTEM, ADDRESS_ICPU_DATA, &value);
+                udelay(20);
+                if(value!=*dp++) {   
+                        printf("VSC7385: Upload mismatch: address 0x%x, "
+                        "read val 0x%x, image val 0x%x\n", len-mylen+1,value,*(dp--));
+                        return(-1);
+                }
+        }
+
+
+        printf("Switch master reset:  Only the phy \n");
+        value = (1<<1);
+        vsc7385_reg_write(BLOCK_SYSTEM, SUBBLOCK_SYSTEM, ADDRESS_GLORESET, value);
+        udelay(150);
+
+        printf("Releasing ICPU from reset \n");
+        value = (1<<8) | (1<<3) | (1<<1) | (1<<0); 
+        vsc7385_reg_write(BLOCK_SYSTEM, SUBBLOCK_SYSTEM, ADDRESS_ICPU_CTRL, value);
+
+
+        return 0;
+}
+
+
+
 int vsc7385_switch_init(u8 mac_port)
 {
 	int mode[7] = { Link1000Full, Link1000Full, Link1000Full, Link1000Full, Link1000Full, 
@@ -1803,6 +1858,7 @@ int vsc7385_switch_init(u8 mac_port)
 					value |= MAC_INT_CLK;
 				break;
 		}
+		printf("MAC_CFG (plus clk bits): 0x%x\n", value);
 		vsc7385_reg_write(BLOCK_MAC, switch_mac_num, ADDRESS_MAC_CFG, value|MAC_RESET);
 		vsc7385_reg_write(BLOCK_MAC, switch_mac_num, ADDRESS_MAC_CFG, value);
 	}
@@ -1818,6 +1874,14 @@ int vsc7385_switch_init(u8 mac_port)
 	vsc7385_reg_write(BLOCK_SYSTEM, SUBBLOCK_SYSTEM, ADDRESS_GLORESET, 2);
 	udelay(4);
 
+	/* Load firmware to the switch */
+/* The firmware provided by vitesse currently breaks functionality
+ * therefore commenting out the load 
+ * To load the firmware just uncomment the next few lines and 
+ * update the vsc7385fw.c file generated via cnvrtr tool from lutton*.bin
+	if (! vsc7385_sw_load(vsc7385fw, vsc7385fw_len)) 
+		return CAVM_OK; //can return error status here.
+*/
 	return CAVM_OK;
 }
 
