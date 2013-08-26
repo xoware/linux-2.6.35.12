@@ -39,6 +39,7 @@
 #include <linux/sched.h>
 #include <linux/types.h>
 #include <linux/jiffies.h>
+#include <linux/kthread.h>
 
 #define printf printk
 #else // u-boot
@@ -58,6 +59,8 @@ ushort jumbo_frame = 0;
 module_param(jumbo_frame, ushort, S_IRUGO|S_IWUSR);
 EXPORT_SYMBOL_GPL(jumbo_frame);
 #endif
+
+static struct  task_struct *vsc_loop;
 
 static u16 get_phy_id(u8 phy_addr);
 
@@ -139,8 +142,10 @@ int cns3xxx_phy_auto_polling_conf_ex(int mac_port, u8 phy_addr, u8 en)
 		return CAVM_ERR;
 	}
 #ifdef CONFIG_CNS3XXX_PSE_SW_PHY_AUTO_POLLING
+	{
 	extern int cns3xxx_sw_auto_polling_conf(u8 mac_port, u16 phy_addr, u8 en);
 	cns3xxx_sw_auto_polling_conf(mac_port, phy_addr, en);
+	}
 #else
 	switch (mac_port) 
 	{
@@ -1760,6 +1765,60 @@ int vsc7385_sw_load(u8 *fw_ptr, u32 len)
 }
 
 
+static int vsc7385_month(void *unused) {
+	u32 value = 0;
+	u32 vlnks =0;
+	int l;
+	enum LANX TLAN;
+	u32 lan_state[5] = { 0,0,0,0,0};
+	printk(KERN_INFO " Started the VSC7385 Monitor kThread \n");
+		printk(KERN_INFO " Running the VSC7385 Monitor kThread \n");
+	while (1) {
+		for (l=0; l < 5; l++){
+			TLAN = l;
+			value = 0; 
+			vlnks = 0; 
+			vsc7385_reg_write(BLOCK_MII, 
+				SUBBLOCK_PHY, REG_MIIMCMD, 
+				PHY_REG(PHY_AUX_CTRL_STAT)|PHY_ADDR(TLAN));
+                	vsc7385_reg_read(BLOCK_MII, 
+				SUBBLOCK_PHY, REG_MIIMDATA, &value);
+			if ( (value & AUTONEG_MSK) && 
+				(value & (SPEEDS_MSK|FDXS_MSK)) != lan_state[TLAN]) {
+				printk(KERN_INFO " VSC7385 LAN%d is AUTONEGGED \n", TLAN);
+				lan_state[TLAN] = value & (SPEEDS_MSK|FDXS_MSK);
+				switch( value & (SPEEDS_MSK|FDXS_MSK)) {
+					case FD1000B:
+						value = MAC_1000_FULL;
+						value |= MAC_INT_CLK;
+						break;
+					case FD100B:
+						value = MAC_100_FULL;
+						value |= MAC_INT_CLK;
+						break;
+					case FD10B:
+						value = MAC_10_FULL;
+						value |= MAC_INT_CLK;
+						break;
+					case HD100B:
+						value = MAC_100_HALF;
+						value |= MAC_INT_CLK;
+						break;
+					case HD10B:
+						value = MAC_10_HALF;
+						value |= MAC_INT_CLK;
+						break;
+				}
+				printf(KERN_INFO "MAC_CFG (plus clk bits): 0x%x\n", value);
+				vsc7385_reg_write(BLOCK_MAC, TLAN, ADDRESS_MAC_CFG, value|MAC_RESET);
+				vsc7385_reg_write(BLOCK_MAC, TLAN, ADDRESS_MAC_CFG, value);
+			}
+		}
+		msleep_interruptible(5000);
+	}
+	return 1;
+}
+
 
 int vsc7385_switch_init(u8 mac_port)
 {
@@ -1879,8 +1938,20 @@ int vsc7385_switch_init(u8 mac_port)
  * therefore commenting out the load 
  * To load the firmware just uncomment the next few lines and 
  * update the vsc7385fw.c file generated via cnvrtr tool from lutton*.bin
-	if (! vsc7385_sw_load(vsc7385fw, vsc7385fw_len)) 
+	if ( vsc7385_sw_load(vsc7385fw, vsc7385fw_len)) 
 		return CAVM_OK; //can return error status here.
+ *
+ * --
+ * AS A WORKAROUND THE FOLLOWING LOOP SETS THE MACS TO THE CORRECT SPEED
+ *  turns out this does not fix the problem either just commenting it out
+ *  and leaving all this in the commit incase this is needed if we ever 
+ *  end up trying/debugging it again. 
+	vsc_loop = kthread_run(vsc7385_month, NULL, "vsc7385_mon");
+	if (IS_ERR(vsc_loop)) {
+		printk(KERN_ERR "Failed to start the VSC7385 Monitor kThread %ld\n",
+			PTR_ERR(vsc_loop));
+		return CAVM_OK;  //should instead return error here
+	}
 */
 	return CAVM_OK;
 }
@@ -4237,6 +4308,7 @@ void vsc7385_init_mac(u8 mac_port)
     u8 mac_addr[]={0x0c, 0x10, 0x18};
     u8 tx = 0, rx = 0;
 
+    tx = rx; // yuck stop whirning 
     cns3xxx_enable_mac_clock(mac_port, 1);
     cns3xxx_phy_auto_polling_enable(mac_port, 0);
 

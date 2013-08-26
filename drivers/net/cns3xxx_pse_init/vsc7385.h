@@ -27,6 +27,31 @@ int vsc7385_reg_write(u32 block, u32 subblock, u32 addr, u32 value);
 #define ADDRESS_MAC_CFG    0
 #define ADDRESS_ADVPORTM   0x19
 
+#define BLOCK_MII 	3
+#define SUBBLOCK_PHY 	0
+#define REG_MIIMCMD 	1
+#define REG_MIIMDATA 	2
+#define MIICMD_OPER_RD 	1
+#define MIICMD_OPER_WR 	0
+// 0000 01XX XXX0 0001 0000 0000 0000 0000
+#define PHY_ADDR(X) 	(MIICMD_OPER_RD<<26)|(X<<21)
+#define PHY_REG(X) 	(X<<16)
+#define PHY_STAT 	1
+#define PHY_AUX_CTRL_STAT 	0x1C
+enum LANX { LAN0, LAN1, LAN2, LAN3, LAN4 };
+// PHY_REG(PHY_STAT) | PHY_ADDR(LAN3)
+#define LNKS_MSK 	0x4
+#define AUTONEG_MSK 	0x8000
+#define SPEEDS_MSK 	0x0018
+#define FDXS_MSK 	0x0020
+#define HD10B		0x0 << 3
+#define FD10B		0x4 << 3
+#define HD100B		0x1 << 3
+#define FD100B		0x5 << 3
+#define HD1000B		0x2 << 3
+#define FD1000B		0x6 << 3
+
+
 /* ethernet modes */
 enum { LinkDown, Link1000Full, Link100Full, Link10Full, Link100Half, Link10Half };
 
